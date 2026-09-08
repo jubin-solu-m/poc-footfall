@@ -1,17 +1,109 @@
 <template>
   <div class="floor-map-wrapper">
+    <section
+      class="occupancy-details"
+      aria-labelledby="occupancy-details-title"
+    >
+      <div class="occupancy-details-heading">
+        <div>
+          <p class="eyebrow">LIVE PRESENCE</p>
+          <h2 id="occupancy-details-title">Occupancy details</h2>
+          <p class="occupancy-summary">
+            {{ selectedOccupancy.count }} devices detected ·
+            {{ selectedOccupancy.change }} vs previous {{ selectedRange }}
+          </p>
+        </div>
+        <div class="occupancy-controls">
+          <select v-model="selectedRange" aria-label="Occupancy time range">
+            <option
+              v-for="range in occupancyRanges"
+              :key="range"
+              :value="range"
+            >
+              Last {{ range }}
+            </option></select
+          ><span class="live-count"
+            ><i /> {{ selectedOccupancy.count }} live</span
+          >
+        </div>
+      </div>
+      <div class="occupancy-details-list">
+        <article
+          v-for="person in selectedOccupancy.people"
+          :key="person.id"
+          class="occupancy-detail-card"
+        >
+          <span class="occupancy-live-dot" />
+          <div>
+            <strong>{{ person.id }}</strong
+            ><small>{{ person.zone }}</small>
+          </div>
+          <span class="presence-label">Present</span>
+        </article>
+      </div>
+    </section>
     <section class="floor-section" aria-labelledby="floor-title">
       <div class="section-heading">
         <div>
           <p class="eyebrow">STORE LAYOUT</p>
           <h2 id="floor-title">Floor map</h2>
         </div>
-        <span class="resize-note">Drag the lower-right corner to resize</span>
+        <div class="floor-actions">
+          <button
+            class="heat-map-button"
+            :class="{ active: heatMapVisible }"
+            :aria-pressed="heatMapVisible"
+            @click="heatMapVisible = !heatMapVisible"
+          >
+            <span class="mdi mdi-fire" />
+            {{ heatMapVisible ? "Hide heat map" : "Heat Map" }}
+          </button>
+          <button
+            class="occupancy-button"
+            :class="{ active: occupancyVisible }"
+            :aria-pressed="occupancyVisible"
+            @click="occupancyVisible = !occupancyVisible"
+          >
+            <span class="mdi mdi-account-group" />
+            {{ occupancyVisible ? "Hide occupancy" : "Occupancy" }}
+          </button>
+          <span class="resize-note">Drag the lower-right corner to resize</span>
+        </div>
       </div>
 
       <div class="map-stage-shell">
         <div class="map-stage" :style="mapSizeStyle">
           <img :src="storeMap" alt="Store floor plan" class="store-map" />
+          <div
+            v-if="heatMapVisible"
+            class="footfall-heatmap"
+            aria-label="Footfall heat map"
+          >
+            <span
+              v-for="point in footfallRanges"
+              :key="point.id"
+              class="heat-spot"
+              :style="heatSpotStyle(point)"
+            />
+          </div>
+          <div
+            v-if="occupancyVisible"
+            class="occupancy-layer"
+            aria-label="Live occupancy"
+          >
+            <span class="occupancy-range-label"
+              >Last {{ selectedRange }} ·
+              {{ selectedOccupancy.count }} present</span
+            >
+            <span
+              v-for="person in selectedOccupancy.people"
+              :key="person.id"
+              class="occupant-marker"
+              :style="occupantStyle(person)"
+              :title="`${person.id} · ${person.zone} · live`"
+              ><span
+            /></span>
+          </div>
           <svg
             class="boundary-overlay"
             viewBox="0 0 100 100"
@@ -20,15 +112,6 @@
           >
             <polygon :points="floorBoundary" />
           </svg>
-          <span
-            v-for="beacon in beacons"
-            :key="beacon.id"
-            class="beacon-marker"
-            :class="beacon.distance"
-            :style="beaconPosition(beacon)"
-            :title="`${beacon.id} · ${beacon.zone} · ${beacon.scannerId} · ${beacon.rssi} dBm · ${beacon.distance}`"
-            ><span
-          /></span>
           <button
             v-for="scanner in scanners"
             :key="scanner.id"
@@ -107,7 +190,6 @@
 <script lang="ts" setup>
 import { computed, onUnmounted, ref } from "vue";
 import storeMap from "@/assets/map/soldam_map.svg";
-
 type Scanner = {
   id: string;
   zone: string;
@@ -118,8 +200,33 @@ type Scanner = {
   x: number;
   y: number;
 };
-
+type ApiResponse<T> = {
+  responseCode: string;
+  responseMessage: string;
+  data: T;
+};
+type Occupant = { id: string; zone: string; x: number; y: number };
+type OccupancySnapshot = { range: string; count: number };
 const selectedScanner = ref<string | null>("SCN001");
+const heatMapVisible = ref(true);
+const occupancyVisible = ref(false);
+const occupancySnapshotsResponse: ApiResponse<OccupancySnapshot[]> = {
+  responseCode: "200",
+  responseMessage: "SUCCESS",
+  data: [
+    { range: "1 hour", count: 4 },
+    { range: "2 hours", count: 7 },
+    { range: "3 hours", count: 9 },
+    { range: "5 hours", count: 14 },
+    { range: "10 hours", count: 21 },
+    { range: "12 hours", count: 26 },
+    { range: "24 hours", count: 38 },
+  ],
+};
+const occupancyRanges = occupancySnapshotsResponse.data.map(
+  (item) => item.range,
+);
+const selectedRange = ref("1 hour");
 const props = defineProps<{ scanners: Scanner[] }>();
 const scanners = props.scanners;
 const mapWidth = ref(1280);
@@ -132,100 +239,65 @@ const mapSizeStyle = computed(() => ({
 const activeScanner = computed(() =>
   props.scanners.find((scanner) => scanner.id === selectedScanner.value),
 );
-const beacons = [
-  {
-    id: "BCN-A01",
-    scannerId: "SCN001",
-    zone: "Entrance",
-    x: 14,
-    y: 28,
-    rssi: -44,
-    distance: "near",
-  },
-  {
-    id: "BCN-A02",
-    scannerId: "SCN001",
-    zone: "Produce",
-    x: 7,
-    y: 66,
-    rssi: -68,
-    distance: "far",
-  },
-  {
-    id: "BCN-B01",
-    scannerId: "SCN004",
-    zone: "Electronics",
-    x: 70,
-    y: 41,
-    rssi: -48,
-    distance: "near",
-  },
-  {
-    id: "BCN-B02",
-    scannerId: "SCN004",
-    zone: "Dairy",
-    x: 88,
-    y: 61,
-    rssi: -72,
-    distance: "far",
-  },
-  {
-    id: "BCN-C01",
-    scannerId: "SCN006",
-    zone: "Checkout",
-    x: 93,
-    y: 81,
-    rssi: -47,
-    distance: "near",
-  },
-  {
-    id: "BCN-C02",
-    scannerId: "SCN006",
-    zone: "Promo Aisle",
-    x: 74,
-    y: 84,
-    rssi: -76,
-    distance: "far",
-  },
-  
-  {
-    id: "BCN-A01",
-    scannerId: "SCN001",
-    zone: "Boundary-Top-Left",
-    x: 0,
-    y: 0,
-    rssi: -76,
-    distance: "far",
-  },
-  {
-    id: "BCN-C02",
-    scannerId: "SCN006",
-    zone: "Boundary-Bottom-Right",
-    x: 100,
-    y: 100,
-    rssi: -76,
-    distance: "far",
-  },
-  {
-    id: "BCN-C02",
-    scannerId: "SCN006",
-    zone: "Boundary-Bottom-Left",
-    x: 0,
-    y: 100,
-    rssi: -76,
-    distance: "far",
-  },
-  
-  {
-    id: "BCN-C02",
-    scannerId: "SCN006",
-    zone: "Boundary-Top-Right",
-    x: 100,
-    y: 0,
-    rssi: -76,
-    distance: "far",
-  },
-];
+const liveOccupantsResponse: ApiResponse<Occupant[]> = {
+  responseCode: "200",
+  responseMessage: "SUCCESS",
+  data: [
+    { id: "DEV-104", zone: "Entrance", x: 18, y: 24 },
+    { id: "DEV-228", zone: "Dairy", x: 54, y: 48 },
+    { id: "DEV-317", zone: "Checkout", x: 88, y: 78 },
+    { id: "DEV-402", zone: "Promo Aisle", x: 66, y: 70 },
+  ],
+};
+const liveOccupants = liveOccupantsResponse.data;
+const selectedOccupancy = computed(() => {
+  const count =
+    occupancySnapshotsResponse.data.find(
+      (item) => item.range === selectedRange.value,
+    )?.count ?? 0;
+  const people = Array.from({ length: count }, (_, index) => {
+    const base = liveOccupants[index % liveOccupants.length];
+    const column = index % 5;
+    const row = Math.floor(index / 5);
+    return {
+      ...base,
+      id: `DEV-${String(104 + index * 17).padStart(3, "0")}`,
+      x: Math.min(96, Math.max(4, base.x + (column - 2) * 3)),
+      y: Math.min(94, Math.max(6, base.y + row * 4)),
+    };
+  });
+  const previousCount =
+    occupancySnapshotsResponse.data[
+      Math.max(0, occupancyRanges.indexOf(selectedRange.value) - 1)
+    ]?.count ?? count;
+  const delta = count - previousCount;
+  return { count, people, change: `${delta >= 0 ? "+" : ""}${delta}` };
+});
+type HeatmapPoint = { x: number; y: number; value: number };
+const heatmapResponse: ApiResponse<HeatmapPoint[]> = {
+  responseCode: "200",
+  responseMessage: "SUCCESS",
+  data: [
+    { x: 10, y: 20, value: 85 },
+    { x: 20, y: 30, value: 72 },
+    { x: 30, y: 15, value: 60 },
+    { x: 40, y: 40, value: 45 },
+    { x: 50, y: 25, value: 30 },
+    { x: 60, y: 50, value: 90 },
+    { x: 70, y: 35, value: 55 },
+    { x: 80, y: 60, value: 75 },
+    { x: 90, y: 45, value: 68 },
+    { x: 100, y: 70, value: 95 },
+  ],
+};
+const footfallRanges = heatmapResponse.data.map((point, index) => ({
+  id: `footfall-${index + 1}`,
+  x: point.x,
+  y: point.y,
+  value: point.value,
+  intensity: point.value / 100,
+  radius: 10 + (point.value / 100) * 12,
+}));
 const floorBoundary =
   "19.6,25.4 31,16 46,16 45.7,21.4 56.5,21 56.8,31.5 77,31.7 77,76 45.7,75.5 45.6,80 20,79.5";
 const boundaryPoints = floorBoundary
@@ -241,9 +313,29 @@ const boundaryBounds = computed(() => {
     height: Math.max(...ys) - Math.min(...ys),
   };
 });
-const beaconPosition = (beacon: { x: number; y: number }) => ({
-  left: `${boundaryBounds.value.minX + (beacon.x / 100) * boundaryBounds.value.width}%`,
-  top: `${boundaryBounds.value.minY + (beacon.y / 100) * boundaryBounds.value.height}%`,
+const boundaryPointX = (x: number) =>
+  boundaryBounds.value.minX + (x / 100) * boundaryBounds.value.width;
+const boundaryPointY = (y: number) =>
+  boundaryBounds.value.minY + (y / 100) * boundaryBounds.value.height;
+const heatSpotStyle = (point: (typeof footfallRanges)[number]) => {
+  const x = boundaryPointX(point.x);
+  const y = boundaryPointY(point.y);
+  const size = Math.max(8, point.radius * 1.55);
+  const high = point.value >= 68;
+  return {
+    left: `${x - size / 2}%`,
+    top: `${y - size / 2}%`,
+    width: `${size}%`,
+    height: `${size}%`,
+    opacity: 0.32 + point.intensity * 0.48,
+    background: high
+      ? `radial-gradient(circle, rgba(196, 25, 32, .82) 0%, rgba(242, 113, 26, .65) 22%, rgba(247, 201, 69, .34) 48%, rgba(247, 201, 69, 0) 76%)`
+      : `radial-gradient(circle, rgba(14, 124, 134, .64) 0%, rgba(246, 211, 101, .38) 34%, rgba(246, 211, 101, 0) 76%)`,
+  };
+};
+const occupantStyle = (person: (typeof liveOccupants)[number]) => ({
+  left: `${boundaryPointX(person.x)}%`,
+  top: `${boundaryPointY(person.y)}%`,
 });
 const boundaryMetrics = computed(() => {
   const xs = boundaryPoints.map(([x]) => x);
@@ -289,6 +381,105 @@ onUnmounted(stopResize);
 <style scoped>
 .floor-map-wrapper {
   width: 100%;
+}
+.occupancy-details {
+  padding: 20px;
+  border-bottom: 1px solid #e4deef;
+  background: #fff;
+}
+.occupancy-details-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 14px;
+}
+.occupancy-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.occupancy-controls select {
+  padding: 7px 10px;
+  border: 1px solid #b9d8e8;
+  border-radius: 6px;
+  background: #fff;
+  color: #1b1526;
+  font-size: 12px;
+}
+.occupancy-summary {
+  margin: 4px 0 0;
+  color: #6a6180;
+  font-size: 12px;
+}
+.live-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: #e7f4eb;
+  color: #375623;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.live-count i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #5fd08a;
+}
+.occupancy-details-list {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  max-height: 174px;
+  overflow-y: auto;
+  align-content: start;
+  padding-right: 4px;
+}
+.occupancy-detail-card {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid #d8eaf4;
+  border-radius: 8px;
+  background: #f5fbfe;
+}
+.occupancy-live-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #1688c7;
+  box-shadow: 0 0 0 4px rgba(22, 136, 199, 0.12);
+}
+.occupancy-detail-card div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.occupancy-detail-card strong {
+  color: #2e006d;
+  font:
+    700 12px "Roboto Mono",
+    monospace;
+}
+.occupancy-detail-card small {
+  overflow: hidden;
+  color: #6a6180;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.presence-label {
+  margin-left: auto;
+  color: #1688c7;
+  font-size: 11px;
+  font-weight: 700;
 }
 .floor-section {
   width: 100%;
@@ -349,16 +540,63 @@ h2 {
   color: #6a6180;
   font-size: 12px;
 }
+.floor-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.heat-map-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border: 1px solid #c55a11;
+  border-radius: 6px;
+  background: #fff;
+  color: #c55a11;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.heat-map-button:hover,
+.heat-map-button.active {
+  background: #c55a11;
+  color: #fff;
+}
+.heat-map-button .mdi {
+  font-size: 16px;
+}
+.occupancy-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border: 1px solid #1688c7;
+  border-radius: 6px;
+  background: #fff;
+  color: #1688c7;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.occupancy-button:hover,
+.occupancy-button.active {
+  background: #1688c7;
+  color: #fff;
+}
+.occupancy-button .mdi {
+  font-size: 16px;
+}
 .map-stage-shell {
   overflow: auto;
   padding: 18px;
-  background: #111;
+  background: #f4f1f8;
 }
 .map-stage {
   position: relative;
   margin: 0 auto;
   overflow: hidden;
-  background: #111;
+  background: #f4f1f8;
 }
 .store-map {
   display: block;
@@ -375,50 +613,79 @@ h2 {
   pointer-events: none;
 }
 .boundary-overlay polygon {
-  fill: rgba(229, 27, 35, 0.08);
-  stroke: #e51b23;
+  fill: transparent;
+  stroke: #de0c1328;
   stroke-width: 0.65;
   vector-effect: non-scaling-stroke;
   stroke-linejoin: round;
 }
-.beacon-marker {
+.footfall-heatmap {
   position: absolute;
-  z-index: 1;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  overflow: hidden;
+  clip-path: polygon(
+    19.6% 25.4%,
+    31% 16%,
+    46% 16%,
+    45.7% 21.4%,
+    56.5% 21%,
+    56.8% 31.5%,
+    77% 31.7%,
+    77% 76%,
+    45.7% 75.5%,
+    45.6% 80%,
+    20% 79.5%
+  );
+}
+.heat-spot {
+  position: absolute;
+  display: block;
+  border-radius: 50%;
+  filter: blur(10px);
+  mix-blend-mode: multiply;
+}
+.occupancy-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+.occupancy-range-label {
+  position: absolute;
+  top: 18px;
+  left: 18px;
+  padding: 5px 8px;
+  border-radius: 4px;
+  background: rgba(22, 136, 199, 0.9);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+.occupant-marker {
+  position: absolute;
+  display: grid;
+  place-items: center;
   width: 18px;
   height: 18px;
   border: 2px solid #fff;
   border-radius: 50%;
+  background: #1688c7;
   transform: translate(-50%, -50%);
-  box-shadow: 0 1px 5px rgba(27, 21, 38, 0.35);
+  box-shadow:
+    0 0 0 5px rgba(22, 136, 199, 0.2),
+    0 2px 5px rgba(27, 21, 38, 0.3);
 }
-.beacon-marker span {
-  display: block;
+.occupant-marker span {
   width: 5px;
   height: 5px;
-  margin: 4px auto;
   border-radius: 50%;
   background: #fff;
 }
-.beacon-marker.near {
-  background: #0e7c86;
-  box-shadow:
-    0 0 0 5px rgba(14, 124, 134, 0.2),
-    0 1px 5px rgba(27, 21, 38, 0.35);
-}
-.beacon-marker.far {
-  width: 14px;
-  height: 14px;
-  background: #c55a11;
-  opacity: 0.72;
-}
-.beacon-marker.far span {
-  width: 4px;
-  height: 4px;
-  margin: 3px auto;
-}
 .scanner-marker {
   position: absolute;
-  z-index: 2;
+  z-index: 4;
   width: 44px;
   height: 44px;
   padding: 0;
@@ -561,6 +828,20 @@ h2 {
   }
 }
 @media (max-width: 640px) {
+  .occupancy-details {
+    padding: 17px;
+  }
+  .occupancy-details-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .occupancy-controls {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .occupancy-details-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
   .section-heading {
     align-items: flex-start;
     flex-direction: column;
