@@ -25,6 +25,13 @@
           ><span class="live-count"
             ><i /> {{ selectedOccupancy.count }} live</span
           >
+          <button
+            class="reset-occupancy-button"
+            :disabled="selectedRange === '1 hour'"
+            @click="selectedRange = '1 hour'"
+          >
+            Reset to 1 hour
+          </button>
         </div>
       </div>
       <div class="occupancy-details-list">
@@ -406,6 +413,23 @@ onUnmounted(stopResize);
   background: #fff;
   color: #1b1526;
   font-size: 12px;
+}
+.reset-occupancy-button {
+  padding: 7px 10px;
+  border: 1px solid #b9d8e8;
+  border-radius: 6px;
+  background: #fff;
+  color: #1688c7;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.reset-occupancy-button:hover:not(:disabled) {
+  background: #eaf6fb;
+}
+.reset-occupancy-button:disabled {
+  cursor: default;
+  opacity: 0.5;
 }
 .occupancy-summary {
   margin: 4px 0 0;
