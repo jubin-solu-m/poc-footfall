@@ -18,6 +18,8 @@
     "@mdi/font": "7.4.47",
     "@unovis/vue": "^1.6.7",
     "heatmap.js": "^2.0.5",
+    "highcharts": "^13.0.2",
+    "highcharts-vue": "^2.0.2",
     "pinia": "^3.0.4",
     "vue": "^3.5.30",
     "vue-i18n": "^11.3.0",

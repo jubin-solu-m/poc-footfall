@@ -12,6 +12,7 @@
             {{ selectedOccupancy.count }} devices detected ·
             {{ selectedOccupancy.change }} vs previous {{ selectedRange }}
           </p>
+          <p class="occupancy-window">{{ selectedWindowLabel }}</p>
         </div>
         <div class="occupancy-controls">
           <select v-model="selectedRange" aria-label="Occupancy time range">
@@ -49,153 +50,191 @@
         </article>
       </div>
     </section>
-    <section class="floor-section" aria-labelledby="floor-title">
-      <div class="section-heading">
-        <div>
-          <p class="eyebrow">STORE LAYOUT</p>
-          <h2 id="floor-title">Floor map</h2>
-        </div>
-        <div class="floor-actions">
-          <button
-            class="heat-map-button"
-            :class="{ active: heatMapVisible }"
-            :aria-pressed="heatMapVisible"
-            @click="heatMapVisible = !heatMapVisible"
-          >
-            <span class="mdi mdi-fire" />
-            {{ heatMapVisible ? "Hide heat map" : "Heat Map" }}
-          </button>
-          <button
-            class="occupancy-button"
-            :class="{ active: occupancyVisible }"
-            :aria-pressed="occupancyVisible"
-            @click="occupancyVisible = !occupancyVisible"
-          >
-            <span class="mdi mdi-account-group" />
-            {{ occupancyVisible ? "Hide occupancy" : "Occupancy" }}
-          </button>
-          <span class="resize-note">Drag the lower-right corner to resize</span>
-        </div>
-      </div>
+    <div class="map-analytics-layout">
+      <div class="store-map-column">
+        <section class="floor-section" aria-labelledby="floor-title">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">STORE LAYOUT</p>
+              <h2 id="floor-title">Floor map</h2>
+            </div>
+            <div class="floor-actions">
+              <button
+                class="heat-map-button"
+                :class="{ active: heatMapVisible }"
+                :aria-pressed="heatMapVisible"
+                @click="heatMapVisible = !heatMapVisible"
+              >
+                <span class="mdi mdi-fire" />
+                {{ heatMapVisible ? "Hide heat map" : "Heat Map" }}
+              </button>
+              <button
+                class="occupancy-button"
+                :class="{ active: occupancyVisible }"
+                :aria-pressed="occupancyVisible"
+                @click="occupancyVisible = !occupancyVisible"
+              >
+                <span class="mdi mdi-account-group" />
+                {{ occupancyVisible ? "Hide occupancy" : "Occupancy" }}
+              </button>
+              <span class="resize-note"
+                >Drag the lower-right corner to resize</span
+              >
+            </div>
+          </div>
 
-      <div class="map-stage-shell">
-        <div class="map-stage" :style="mapSizeStyle">
-          <img :src="storeMap" alt="Store floor plan" class="store-map" />
-          <div
-            v-if="heatMapVisible"
-            class="footfall-heatmap"
-            aria-label="Footfall heat map"
-          >
-            <span
-              v-for="point in footfallRanges"
-              :key="point.id"
-              class="heat-spot"
-              :style="heatSpotStyle(point)"
-            />
+          <div class="map-stage-shell">
+            <div class="map-stage" :style="mapSizeStyle">
+              <img :src="storeMap" alt="Store floor plan" class="store-map" />
+              <div
+                v-if="heatMapVisible"
+                class="footfall-heatmap"
+                aria-label="Footfall heat map"
+              >
+                <span
+                  v-for="point in footfallRanges"
+                  :key="point.id"
+                  class="heat-spot"
+                  :style="heatSpotStyle(point)"
+                />
+              </div>
+              <div
+                v-if="occupancyVisible"
+                class="occupancy-layer"
+                aria-label="Live occupancy"
+              >
+                <span class="occupancy-range-label"
+                  >Last {{ selectedRange }} ·
+                  {{ selectedOccupancy.count }} present ·
+                  {{ selectedWindowLabel }}</span
+                >
+                <span
+                  v-for="person in selectedOccupancy.people"
+                  :key="person.id"
+                  class="occupant-marker"
+                  :style="occupantStyle(person)"
+                  :title="`${person.id} · ${person.zone} · live`"
+                  ><span
+                /></span>
+              </div>
+              <svg
+                class="boundary-overlay"
+                viewBox="0 0 100 100"
+                preserveAspectRatio="none"
+                aria-label="Defined BLE coverage boundary"
+              >
+                <polygon :points="floorBoundary" />
+              </svg>
+              <button
+                v-for="scanner in scanners"
+                :key="scanner.id"
+                class="scanner-marker"
+                :class="{ offline: scanner.status === 'Offline' }"
+                :style="{ left: `${scanner.x}%`, top: `${scanner.y}%` }"
+                :aria-label="`${scanner.id}, ${scanner.zone}, ${scanner.status}`"
+                @click="selectedScanner = scanner.id"
+              >
+                <span class="pulse-ring" />
+                <span class="scanner-pin"
+                  ><span class="mdi mdi-bluetooth"
+                /></span>
+                <span class="scanner-label">{{ scanner.id }}</span>
+              </button>
+              <div v-if="activeScanner" class="scanner-popover">
+                <button
+                  class="close"
+                  aria-label="Close scanner details"
+                  @click="selectedScanner = null"
+                >
+                  ×
+                </button>
+                <strong>{{ activeScanner.id }}</strong>
+                <span>{{ activeScanner.zone }}</span>
+                <span
+                  >{{ activeScanner.status }} ·
+                  {{ activeScanner.rssi }} dBm</span
+                >
+                <span>Max RSSI · {{ activeScanner.maxRssi }} dBm</span>
+                <span
+                  >{{
+                    activeScanner.observations.toLocaleString("en-IN")
+                  }}
+                  observations/min</span
+                >
+              </div>
+              <button
+                class="resize-handle"
+                aria-label="Resize map"
+                title="Drag to resize map"
+                @pointerdown="startResize"
+              />
+            </div>
           </div>
-          <div
-            v-if="occupancyVisible"
-            class="occupancy-layer"
-            aria-label="Live occupancy"
-          >
-            <span class="occupancy-range-label"
-              >Last {{ selectedRange }} ·
-              {{ selectedOccupancy.count }} present</span
-            >
+
+          <footer class="map-footer">
             <span
-              v-for="person in selectedOccupancy.people"
-              :key="person.id"
-              class="occupant-marker"
-              :style="occupantStyle(person)"
-              :title="`${person.id} · ${person.zone} · live`"
-              ><span
-            /></span>
+              v-for="scanner in scanners"
+              :key="scanner.id"
+              class="legend-item"
+            >
+              <i :class="{ offline: scanner.status === 'Offline' }" />
+              <b>{{ scanner.id }}</b> {{ scanner.zone }}
+            </span>
+          </footer>
+        </section>
+        <aside class="map-metrics" aria-label="Map measurements">
+          <div class="metric">
+            <span>Map width</span><strong>{{ mapWidth }} px</strong>
           </div>
-          <svg
-            class="boundary-overlay"
-            viewBox="0 0 100 100"
-            preserveAspectRatio="none"
-            aria-label="Defined BLE coverage boundary"
-          >
-            <polygon :points="floorBoundary" />
-          </svg>
-          <button
-            v-for="scanner in scanners"
-            :key="scanner.id"
-            class="scanner-marker"
-            :class="{ offline: scanner.status === 'Offline' }"
-            :style="{ left: `${scanner.x}%`, top: `${scanner.y}%` }"
-            :aria-label="`${scanner.id}, ${scanner.zone}, ${scanner.status}`"
-            @click="selectedScanner = scanner.id"
-          >
-            <span class="pulse-ring" />
-            <span class="scanner-pin"><span class="mdi mdi-bluetooth" /></span>
-            <span class="scanner-label">{{ scanner.id }}</span>
-          </button>
-          <div v-if="activeScanner" class="scanner-popover">
-            <button
-              class="close"
-              aria-label="Close scanner details"
-              @click="selectedScanner = null"
-            >
-              ×
-            </button>
-            <strong>{{ activeScanner.id }}</strong>
-            <span>{{ activeScanner.zone }}</span>
-            <span
-              >{{ activeScanner.status }} · {{ activeScanner.rssi }} dBm</span
-            >
-            <span>Max RSSI · {{ activeScanner.maxRssi }} dBm</span>
-            <span
-              >{{
-                activeScanner.observations.toLocaleString("en-IN")
-              }}
-              observations/min</span
+          <div class="metric">
+            <span>Map height</span><strong>{{ mapHeight }} px</strong>
+          </div>
+          <div class="metric">
+            <span>Aspect ratio</span
+            ><strong>{{ mapAspectRatio.toFixed(2) }} : 1</strong>
+          </div>
+          <div class="metric">
+            <span>Inside boundary</span
+            ><strong
+              >{{ boundaryMetrics.widthPercent.toFixed(1) }}% ×
+              {{ boundaryMetrics.heightPercent.toFixed(1) }}%</strong
+            ><small
+              >{{ boundaryMetrics.widthPixels }} ×
+              {{ boundaryMetrics.heightPixels }} px bounds</small
             >
           </div>
-          <button
-            class="resize-handle"
-            aria-label="Resize map"
-            title="Drag to resize map"
-            @pointerdown="startResize"
+        </aside>
+      </div>
+      <div class="map-charts-column">
+        <article class="chart-card">
+          <div class="chart-heading">
+            <h3>Visitors by hour</h3>
+            <span>Peak at 12:00</span>
+          </div>
+          <HighchartsChart
+            :highcharts="Highcharts"
+            :options="visitorsByHourOptions"
           />
-        </div>
+        </article>
+        <article class="chart-card">
+          <div class="chart-heading">
+            <h3>Zone ranking</h3>
+            <span>Visitors today</span>
+          </div>
+          <HighchartsChart
+            :highcharts="Highcharts"
+            :options="zoneRankingOptions"
+          />
+        </article>
       </div>
-
-      <footer class="map-footer">
-        <span v-for="scanner in scanners" :key="scanner.id" class="legend-item">
-          <i :class="{ offline: scanner.status === 'Offline' }" />
-          <b>{{ scanner.id }}</b> {{ scanner.zone }}
-        </span>
-      </footer>
-    </section>
-    <aside class="map-metrics" aria-label="Map measurements">
-      <div class="metric">
-        <span>Map width</span><strong>{{ mapWidth }} px</strong>
-      </div>
-      <div class="metric">
-        <span>Map height</span><strong>{{ mapHeight }} px</strong>
-      </div>
-      <div class="metric">
-        <span>Aspect ratio</span
-        ><strong>{{ mapAspectRatio.toFixed(2) }} : 1</strong>
-      </div>
-      <div class="metric">
-        <span>Inside boundary</span
-        ><strong
-          >{{ boundaryMetrics.widthPercent.toFixed(1) }}% ×
-          {{ boundaryMetrics.heightPercent.toFixed(1) }}%</strong
-        ><small
-          >{{ boundaryMetrics.widthPixels }} ×
-          {{ boundaryMetrics.heightPixels }} px bounds</small
-        >
-      </div>
-    </aside>
+    </div>
   </div>
 </template>
 
 <script lang="ts" setup>
 import { computed, onUnmounted, ref } from "vue";
+import Highcharts from "highcharts";
+import { Chart as HighchartsChart } from "highcharts-vue";
 import storeMap from "@/assets/map/soldam_map.svg";
 type Scanner = {
   id: string;
@@ -234,6 +273,21 @@ const occupancyRanges = occupancySnapshotsResponse.data.map(
   (item) => item.range,
 );
 const selectedRange = ref("1 hour");
+const mockNow = new Date("2026-09-08T18:00:00");
+const selectedWindowLabel = computed(() => {
+  const hours = Number.parseInt(selectedRange.value, 10);
+  const start = new Date(mockNow.getTime() - hours * 60 * 60 * 1000);
+  const formatDate = (date: Date) =>
+    date.toLocaleString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+  return `${formatDate(start)} → ${formatDate(mockNow)}`;
+});
 const props = defineProps<{ scanners: Scanner[] }>();
 const scanners = props.scanners;
 const mapWidth = ref(1280);
@@ -280,6 +334,125 @@ const selectedOccupancy = computed(() => {
   const delta = count - previousCount;
   return { count, people, change: `${delta >= 0 ? "+" : ""}${delta}` };
 });
+const visitorsByHourOptions: Highcharts.Options = {
+  chart: {
+    type: "column",
+    height: 360,
+    backgroundColor: "transparent",
+    spacing: [8, 10, 8, 8],
+  },
+  title: { text: undefined },
+  credits: { enabled: false },
+  legend: { enabled: false },
+  xAxis: {
+    categories: [
+      "08",
+      "09",
+      "10",
+      "11",
+      "12",
+      "13",
+      "14",
+      "15",
+      "16",
+      "17",
+      "18",
+      "19",
+      "20",
+      "21",
+      "22",
+    ],
+    lineColor: "#e4deef",
+    tickColor: "#e4deef",
+    labels: { style: { color: "#6a6180", fontSize: "11px" } },
+  },
+  yAxis: {
+    title: { text: undefined },
+    gridLineColor: "#efeaf7",
+    labels: { style: { color: "#6a6180", fontSize: "11px" } },
+  },
+  tooltip: { pointFormat: "<b>{point.y}</b> visitors" },
+  plotOptions: {
+    column: {
+      borderWidth: 0,
+      borderRadius: 3,
+      pointPadding: 0.04,
+      groupPadding: 0.06,
+    },
+  },
+  series: [
+    {
+      type: "column",
+      name: "Visitors",
+      color: "#b995dc",
+      data: [
+        122, 181, 260, 319, 409, 430, 310, 271, 301, 370, 430, 396, 284, 189,
+        95,
+      ],
+    },
+  ],
+};
+const zoneRankingOptions: Highcharts.Options = {
+  chart: {
+    type: "bar",
+    height: 380,
+    backgroundColor: "transparent",
+    spacing: [8, 10, 8, 8],
+  },
+  title: { text: undefined },
+  credits: { enabled: false },
+  legend: { enabled: false },
+  xAxis: {
+    categories: [
+      "Entrance",
+      "Promo Aisle",
+      "Checkout",
+      "Produce",
+      "Dairy",
+      "Apparel",
+      "Electronics",
+      "Café",
+    ],
+    lineWidth: 0,
+    labels: { style: { color: "#3a304d", fontSize: "11px" } },
+  },
+  yAxis: {
+    min: 0,
+    title: { text: undefined },
+    gridLineWidth: 0,
+    labels: { enabled: false },
+  },
+  tooltip: { pointFormat: "<b>{point.y}</b> visitors" },
+  plotOptions: {
+    bar: {
+      borderWidth: 0,
+      borderRadius: 4,
+      pointWidth: 9,
+      color: "#7622b8",
+      dataLabels: {
+        enabled: true,
+        align: "right",
+        inside: false,
+        crop: false,
+        overflow: "allow",
+        style: {
+          color: "#3a304d",
+          fontSize: "11px",
+          fontWeight: "400",
+          textOutline: "none",
+        },
+      },
+    },
+  },
+  series: [
+    {
+      type: "bar",
+      name: "Visitors",
+      data: [235, 193, 172, 131, 110, 110, 91, 59],
+      dataLabels: { enabled: true },
+    },
+  ],
+};
 type HeatmapPoint = { x: number; y: number; value: number };
 const heatmapResponse: ApiResponse<HeatmapPoint[]> = {
   responseCode: "200",
@@ -436,6 +609,13 @@ onUnmounted(stopResize);
   color: #6a6180;
   font-size: 12px;
 }
+.occupancy-window {
+  margin: 4px 0 0;
+  color: #1688c7;
+  font:
+    600 11px "Roboto Mono",
+    monospace;
+}
 .live-count {
   display: inline-flex;
   align-items: center;
@@ -510,6 +690,54 @@ onUnmounted(stopResize);
   overflow: hidden;
   border-top: 1px solid #e4deef;
   background: #fff;
+}
+.map-analytics-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr);
+  gap: 16px;
+  padding: 16px;
+  background: #f7f5fa;
+}
+.store-map-column {
+  min-width: 0;
+}
+.store-map-column .floor-section {
+  border: 1px solid #e4deef;
+  border-radius: 10px;
+}
+.store-map-column .map-metrics {
+  border: 1px solid #e4deef;
+  border-top: 0;
+  border-radius: 0 0 10px 10px;
+}
+.map-charts-column {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+  min-width: 0;
+}
+.chart-card {
+  overflow: hidden;
+  border: 1px solid #e4deef;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 1px 0 rgba(46, 0, 109, 0.06);
+}
+.chart-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #e4deef;
+}
+.chart-heading h3 {
+  margin: 0;
+  color: #1b1526;
+  font-size: 15px;
+}
+.chart-heading span {
+  color: #6a6180;
+  font-size: 12px;
 }
 .map-metrics {
   display: grid;
@@ -852,6 +1080,10 @@ h2 {
   }
 }
 @media (max-width: 640px) {
+  .map-analytics-layout {
+    grid-template-columns: 1fr;
+    padding: 8px;
+  }
   .occupancy-details {
     padding: 17px;
   }
