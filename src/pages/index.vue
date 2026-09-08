@@ -19,7 +19,9 @@
             <span class="device-dot" />
             <div>
               <strong>{{ scanner.id }}</strong
-              ><small>{{ scanner.zone }}</small>
+              ><small
+                >{{ scanner.zone }} · Max RSSI {{ scanner.maxRssi }} dBm</small
+              >
             </div>
             <span class="device-status">{{ scanner.status }}</span>
           </article>
@@ -40,6 +42,7 @@ type Scanner = {
   status: "Online" | "Offline";
   rssi: number;
   observations: number;
+  maxRssi: number;
   x: number;
   y: number;
 };
@@ -50,15 +53,17 @@ const scanners: Scanner[] = [
     zone: "Entrance",
     status: "Online",
     rssi: -62,
+    maxRssi: -42,
     observations: 812,
-    x: 17,
-    y: 45,
+    x: 36,
+    y: 13,
   },
   {
     id: "SCN004",
     zone: "Electronics",
     status: "Online",
     rssi: -74,
+    maxRssi: -51,
     observations: 182,
     x: 58,
     y: 29,
@@ -68,6 +73,7 @@ const scanners: Scanner[] = [
     zone: "Checkout",
     status: "Online",
     rssi: -63,
+    maxRssi: -45,
     observations: 735,
     x: 79,
     y: 77.1,

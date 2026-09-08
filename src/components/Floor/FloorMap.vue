@@ -11,6 +11,23 @@
     <div class="map-stage-shell">
       <div class="map-stage" :style="mapSizeStyle">
         <img :src="storeMap" alt="Store floor plan" class="store-map" />
+        <svg
+          class="boundary-overlay"
+          viewBox="0 0 100 100"
+          preserveAspectRatio="none"
+          aria-label="Defined BLE coverage boundary"
+        >
+          <polygon :points="floorBoundary" />
+        </svg>
+        <span
+          v-for="beacon in beacons"
+          :key="beacon.id"
+          class="beacon-marker"
+          :class="beacon.distance"
+          :style="{ left: `${beacon.x}%`, top: `${beacon.y}%` }"
+          :title="`${beacon.id} · ${beacon.rssi} dBm · ${beacon.distance}`"
+          ><span
+        /></span>
         <button
           v-for="scanner in scanners"
           :key="scanner.id"
@@ -35,6 +52,7 @@
           <strong>{{ activeScanner.id }}</strong>
           <span>{{ activeScanner.zone }}</span>
           <span>{{ activeScanner.status }} · {{ activeScanner.rssi }} dBm</span>
+          <span>Max RSSI · {{ activeScanner.maxRssi }} dBm</span>
           <span
             >{{
               activeScanner.observations.toLocaleString("en-IN")
@@ -70,6 +88,7 @@ type Scanner = {
   status: "Online" | "Offline";
   rssi: number;
   observations: number;
+  maxRssi: number;
   x: number;
   y: number;
 };
@@ -87,6 +106,16 @@ const mapSizeStyle = computed(() => ({
 const activeScanner = computed(() =>
   props.scanners.find((scanner) => scanner.id === selectedScanner.value),
 );
+const beacons = [
+  { id: "BCN-A01", x: 13.5, y: 43, rssi: -44, distance: "near" },
+  { id: "BCN-A02", x: 21, y: 53, rssi: -68, distance: "far" },
+  { id: "BCN-B01", x: 57.5, y: 31.5, rssi: -48, distance: "near" },
+  { id: "BCN-B02", x: 68, y: 38, rssi: -72, distance: "far" },
+  { id: "BCN-C01", x: 82.5, y: 75, rssi: -47, distance: "near" },
+  { id: "BCN-C02", x: 70, y: 68, rssi: -76, distance: "far" },
+];
+const floorBoundary =
+  "18,25.4 28,16 46,16 45.7,21.4 56.5,21 56.8,31.5 77,31.7 77,76 45.7,75.5 45.6,80 18,79.5";
 
 let resizeStartX = 0;
 let resizeStartWidth = 0;
@@ -163,6 +192,56 @@ h2 {
   width: 100%;
   height: 100%;
   object-fit: contain;
+}
+.boundary-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.boundary-overlay polygon {
+  fill: rgba(229, 27, 35, 0.08);
+  stroke: #e51b23;
+  stroke-width: 0.65;
+  vector-effect: non-scaling-stroke;
+  stroke-linejoin: round;
+}
+.beacon-marker {
+  position: absolute;
+  z-index: 1;
+  width: 18px;
+  height: 18px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 1px 5px rgba(27, 21, 38, 0.35);
+}
+.beacon-marker span {
+  display: block;
+  width: 5px;
+  height: 5px;
+  margin: 4px auto;
+  border-radius: 50%;
+  background: #fff;
+}
+.beacon-marker.near {
+  background: #0e7c86;
+  box-shadow:
+    0 0 0 5px rgba(14, 124, 134, 0.2),
+    0 1px 5px rgba(27, 21, 38, 0.35);
+}
+.beacon-marker.far {
+  width: 14px;
+  height: 14px;
+  background: #c55a11;
+  opacity: 0.72;
+}
+.beacon-marker.far span {
+  width: 4px;
+  height: 4px;
+  margin: 3px auto;
 }
 .scanner-marker {
   position: absolute;
