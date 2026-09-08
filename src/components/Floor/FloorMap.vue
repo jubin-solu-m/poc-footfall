@@ -719,7 +719,7 @@ h2 {
 }
 .scanner-pin {
   position: absolute;
-  inset: 8px;
+  inset: 5px;
   display: grid;
   place-items: center;
   border: 3px solid #fff;
