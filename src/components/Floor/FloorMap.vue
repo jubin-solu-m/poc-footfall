@@ -1,81 +1,107 @@
 <template>
-  <section class="floor-section" aria-labelledby="floor-title">
-    <div class="section-heading">
-      <div>
-        <p class="eyebrow">STORE LAYOUT</p>
-        <h2 id="floor-title">Floor map</h2>
-      </div>
-      <span class="resize-note">Drag the lower-right corner to resize</span>
-    </div>
-
-    <div class="map-stage-shell">
-      <div class="map-stage" :style="mapSizeStyle">
-        <img :src="storeMap" alt="Store floor plan" class="store-map" />
-        <svg
-          class="boundary-overlay"
-          viewBox="0 0 100 100"
-          preserveAspectRatio="none"
-          aria-label="Defined BLE coverage boundary"
-        >
-          <polygon :points="floorBoundary" />
-        </svg>
-        <span
-          v-for="beacon in beacons"
-          :key="beacon.id"
-          class="beacon-marker"
-          :class="beacon.distance"
-          :style="{ left: `${beacon.x}%`, top: `${beacon.y}%` }"
-          :title="`${beacon.id} · ${beacon.rssi} dBm · ${beacon.distance}`"
-          ><span
-        /></span>
-        <button
-          v-for="scanner in scanners"
-          :key="scanner.id"
-          class="scanner-marker"
-          :class="{ offline: scanner.status === 'Offline' }"
-          :style="{ left: `${scanner.x}%`, top: `${scanner.y}%` }"
-          :aria-label="`${scanner.id}, ${scanner.zone}, ${scanner.status}`"
-          @click="selectedScanner = scanner.id"
-        >
-          <span class="pulse-ring" />
-          <span class="scanner-pin"><span class="mdi mdi-bluetooth" /></span>
-          <span class="scanner-label">{{ scanner.id }}</span>
-        </button>
-        <div v-if="activeScanner" class="scanner-popover">
-          <button
-            class="close"
-            aria-label="Close scanner details"
-            @click="selectedScanner = null"
-          >
-            ×
-          </button>
-          <strong>{{ activeScanner.id }}</strong>
-          <span>{{ activeScanner.zone }}</span>
-          <span>{{ activeScanner.status }} · {{ activeScanner.rssi }} dBm</span>
-          <span>Max RSSI · {{ activeScanner.maxRssi }} dBm</span>
-          <span
-            >{{
-              activeScanner.observations.toLocaleString("en-IN")
-            }}
-            observations/min</span
-          >
+  <div class="floor-map-wrapper">
+    <section class="floor-section" aria-labelledby="floor-title">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">STORE LAYOUT</p>
+          <h2 id="floor-title">Floor map</h2>
         </div>
-        <button
-          class="resize-handle"
-          aria-label="Resize map"
-          title="Drag to resize map"
-          @pointerdown="startResize"
-        />
+        <span class="resize-note">Drag the lower-right corner to resize</span>
       </div>
-    </div>
 
-    <footer class="map-footer">
-      <span v-for="scanner in scanners" :key="scanner.id" class="legend-item">
-        <i :class="{ offline: scanner.status === 'Offline' }" />
-        <b>{{ scanner.id }}</b> {{ scanner.zone }}
-      </span>
-    </footer>
-  </section>
+      <div class="map-stage-shell">
+        <div class="map-stage" :style="mapSizeStyle">
+          <img :src="storeMap" alt="Store floor plan" class="store-map" />
+          <svg
+            class="boundary-overlay"
+            viewBox="0 0 100 100"
+            preserveAspectRatio="none"
+            aria-label="Defined BLE coverage boundary"
+          >
+            <polygon :points="floorBoundary" />
+          </svg>
+          <span
+            v-for="beacon in beacons"
+            :key="beacon.id"
+            class="beacon-marker"
+            :class="beacon.distance"
+            :style="beaconPosition(beacon)"
+            :title="`${beacon.id} · ${beacon.zone} · ${beacon.scannerId} · ${beacon.rssi} dBm · ${beacon.distance}`"
+            ><span
+          /></span>
+          <button
+            v-for="scanner in scanners"
+            :key="scanner.id"
+            class="scanner-marker"
+            :class="{ offline: scanner.status === 'Offline' }"
+            :style="{ left: `${scanner.x}%`, top: `${scanner.y}%` }"
+            :aria-label="`${scanner.id}, ${scanner.zone}, ${scanner.status}`"
+            @click="selectedScanner = scanner.id"
+          >
+            <span class="pulse-ring" />
+            <span class="scanner-pin"><span class="mdi mdi-bluetooth" /></span>
+            <span class="scanner-label">{{ scanner.id }}</span>
+          </button>
+          <div v-if="activeScanner" class="scanner-popover">
+            <button
+              class="close"
+              aria-label="Close scanner details"
+              @click="selectedScanner = null"
+            >
+              ×
+            </button>
+            <strong>{{ activeScanner.id }}</strong>
+            <span>{{ activeScanner.zone }}</span>
+            <span
+              >{{ activeScanner.status }} · {{ activeScanner.rssi }} dBm</span
+            >
+            <span>Max RSSI · {{ activeScanner.maxRssi }} dBm</span>
+            <span
+              >{{
+                activeScanner.observations.toLocaleString("en-IN")
+              }}
+              observations/min</span
+            >
+          </div>
+          <button
+            class="resize-handle"
+            aria-label="Resize map"
+            title="Drag to resize map"
+            @pointerdown="startResize"
+          />
+        </div>
+      </div>
+
+      <footer class="map-footer">
+        <span v-for="scanner in scanners" :key="scanner.id" class="legend-item">
+          <i :class="{ offline: scanner.status === 'Offline' }" />
+          <b>{{ scanner.id }}</b> {{ scanner.zone }}
+        </span>
+      </footer>
+    </section>
+    <aside class="map-metrics" aria-label="Map measurements">
+      <div class="metric">
+        <span>Map width</span><strong>{{ mapWidth }} px</strong>
+      </div>
+      <div class="metric">
+        <span>Map height</span><strong>{{ mapHeight }} px</strong>
+      </div>
+      <div class="metric">
+        <span>Aspect ratio</span
+        ><strong>{{ mapAspectRatio.toFixed(2) }} : 1</strong>
+      </div>
+      <div class="metric">
+        <span>Inside boundary</span
+        ><strong
+          >{{ boundaryMetrics.widthPercent.toFixed(1) }}% ×
+          {{ boundaryMetrics.heightPercent.toFixed(1) }}%</strong
+        ><small
+          >{{ boundaryMetrics.widthPixels }} ×
+          {{ boundaryMetrics.heightPixels }} px bounds</small
+        >
+      </div>
+    </aside>
+  </div>
 </template>
 
 <script lang="ts" setup>
@@ -107,15 +133,130 @@ const activeScanner = computed(() =>
   props.scanners.find((scanner) => scanner.id === selectedScanner.value),
 );
 const beacons = [
-  { id: "BCN-A01", x: 13.5, y: 43, rssi: -44, distance: "near" },
-  { id: "BCN-A02", x: 21, y: 53, rssi: -68, distance: "far" },
-  { id: "BCN-B01", x: 57.5, y: 31.5, rssi: -48, distance: "near" },
-  { id: "BCN-B02", x: 68, y: 38, rssi: -72, distance: "far" },
-  { id: "BCN-C01", x: 82.5, y: 75, rssi: -47, distance: "near" },
-  { id: "BCN-C02", x: 70, y: 68, rssi: -76, distance: "far" },
+  {
+    id: "BCN-A01",
+    scannerId: "SCN001",
+    zone: "Entrance",
+    x: 14,
+    y: 28,
+    rssi: -44,
+    distance: "near",
+  },
+  {
+    id: "BCN-A02",
+    scannerId: "SCN001",
+    zone: "Produce",
+    x: 7,
+    y: 66,
+    rssi: -68,
+    distance: "far",
+  },
+  {
+    id: "BCN-B01",
+    scannerId: "SCN004",
+    zone: "Electronics",
+    x: 70,
+    y: 41,
+    rssi: -48,
+    distance: "near",
+  },
+  {
+    id: "BCN-B02",
+    scannerId: "SCN004",
+    zone: "Dairy",
+    x: 88,
+    y: 61,
+    rssi: -72,
+    distance: "far",
+  },
+  {
+    id: "BCN-C01",
+    scannerId: "SCN006",
+    zone: "Checkout",
+    x: 93,
+    y: 81,
+    rssi: -47,
+    distance: "near",
+  },
+  {
+    id: "BCN-C02",
+    scannerId: "SCN006",
+    zone: "Promo Aisle",
+    x: 74,
+    y: 84,
+    rssi: -76,
+    distance: "far",
+  },
+  
+  {
+    id: "BCN-A01",
+    scannerId: "SCN001",
+    zone: "Boundary-Top-Left",
+    x: 0,
+    y: 0,
+    rssi: -76,
+    distance: "far",
+  },
+  {
+    id: "BCN-C02",
+    scannerId: "SCN006",
+    zone: "Boundary-Bottom-Right",
+    x: 100,
+    y: 100,
+    rssi: -76,
+    distance: "far",
+  },
+  {
+    id: "BCN-C02",
+    scannerId: "SCN006",
+    zone: "Boundary-Bottom-Left",
+    x: 0,
+    y: 100,
+    rssi: -76,
+    distance: "far",
+  },
+  
+  {
+    id: "BCN-C02",
+    scannerId: "SCN006",
+    zone: "Boundary-Top-Right",
+    x: 100,
+    y: 0,
+    rssi: -76,
+    distance: "far",
+  },
 ];
 const floorBoundary =
   "19.6,25.4 31,16 46,16 45.7,21.4 56.5,21 56.8,31.5 77,31.7 77,76 45.7,75.5 45.6,80 20,79.5";
+const boundaryPoints = floorBoundary
+  .split(" ")
+  .map((point) => point.split(",").map(Number) as [number, number]);
+const boundaryBounds = computed(() => {
+  const xs = boundaryPoints.map(([x]) => x);
+  const ys = boundaryPoints.map(([, y]) => y);
+  return {
+    minX: Math.min(...xs),
+    minY: Math.min(...ys),
+    width: Math.max(...xs) - Math.min(...xs),
+    height: Math.max(...ys) - Math.min(...ys),
+  };
+});
+const beaconPosition = (beacon: { x: number; y: number }) => ({
+  left: `${boundaryBounds.value.minX + (beacon.x / 100) * boundaryBounds.value.width}%`,
+  top: `${boundaryBounds.value.minY + (beacon.y / 100) * boundaryBounds.value.height}%`,
+});
+const boundaryMetrics = computed(() => {
+  const xs = boundaryPoints.map(([x]) => x);
+  const ys = boundaryPoints.map(([, y]) => y);
+  const widthPercent = Math.max(...xs) - Math.min(...xs);
+  const heightPercent = Math.max(...ys) - Math.min(...ys);
+  return {
+    widthPercent,
+    heightPercent,
+    widthPixels: Math.round((mapWidth.value * widthPercent) / 100),
+    heightPixels: Math.round((mapHeight.value * heightPercent) / 100),
+  };
+});
 
 let resizeStartX = 0;
 let resizeStartWidth = 0;
@@ -146,11 +287,43 @@ onUnmounted(stopResize);
 </script>
 
 <style scoped>
+.floor-map-wrapper {
+  width: 100%;
+}
 .floor-section {
   width: 100%;
   overflow: hidden;
   border-top: 1px solid #e4deef;
   background: #fff;
+}
+.map-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  border-top: 1px solid #e4deef;
+  background: #e4deef;
+}
+.metric {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 13px 18px;
+  background: #fbf9fe;
+}
+.metric span,
+.metric small {
+  color: #6a6180;
+  font-size: 11px;
+}
+.metric strong {
+  color: #2e006d;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+.metric small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .section-heading {
   display: flex;
@@ -402,6 +575,9 @@ h2 {
   }
   .scanner-label {
     font-size: 10px;
+  }
+  .map-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 </style>
